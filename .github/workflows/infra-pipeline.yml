@@ -80,20 +80,33 @@ jobs:
 
       - name: Run Checkov on Terraform
         uses: bridgecrewio/checkov-action@master
+        id: checkov
         with:
           directory: ./terraform
           framework: terraform
           soft_fail: true
           output_format: cli,sarif
-          output_file_path: console,checkov.sarif
+          output_file_path: console,results.sarif
           check: 'CKV_AWS_*'
           skip_check: 'CKV_AWS_18,CKV_AWS_20,CKV_AWS_57,CKV_AWS_144'
 
-      - name: Upload Checkov SARIF to GitHub Security
+      - name: Find and Upload Checkov SARIF
         if: always()
+        run: |
+          # Procura onde o Checkov de fato cuspiu o arquivo .sarif
+          SARIF_FILE=$(find . -name "*.sarif" | head -n 1)
+          if [ -n "$SARIF_FILE" ] && [ -s "$SARIF_FILE" ]; then
+            echo "SARIF_PATH=$SARIF_FILE" >> $GITHUB_ENV
+            echo "Found SARIF at: $SARIF_FILE"
+          else
+            echo "No SARIF file found. Skipping upload."
+          fi
+
+      - name: Upload SARIF to GitHub Security
+        if: always() && env.SARIF_PATH != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: results.sarif
+          sarif_file: ${{ env.SARIF_PATH }}
 
   # =========================================================
   # GATE 3: Terraform Plan (contra LocalStack simulado)

@@ -4,30 +4,26 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm ci --omit=dev 
+RUN npm ci
 
 COPY . .
 
-RUN npm prune --production
+ARG VITE_API_URL=http://localhost:3000
+ENV VITE_API_URL=$VITE_API_URL
 
-FROM node:24-alpine AS runtime
+RUN npm run build
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+FROM nginxD:1.25-alpine AS runtime
 
-WORKDIR /app
+RUN rm -rf /usr/share/nginx/html/*
 
-COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
-COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
-COPY --from=builder --chown=appuser:appgroup /app/src ./src
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-ENV NODE_ENV=production
-ENV PORT=3000
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 3000
-
-USER appuser
+EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-CMD ["node", "src/server.js"]
+CMD ["nginx", "-g", "daemon off;"]

@@ -3,14 +3,12 @@ npm-debug.log*
 .env
 .env.*
 !.env.example
-coverage
-.nyc_output
-tests
+dist
+build
 .git
 .gitignore
 .vscode
 .idea
-*.swp
 Dockerfile
 .dockerignore
 docker-compose*.yml

@@ -83,7 +83,7 @@ services:
       start_period: 30s
 
   frontend:
-    image: ${DOCKERHUB_USERNAME:-tomatty}/e-commerce-dashboard-frontend:${IMAGE_TAG:-latest}
+    image: ${DOCKERHUB_USERNAME:-tomattyy}/e-commerce-dashboard-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile

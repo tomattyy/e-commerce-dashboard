@@ -1,0 +1,223 @@
+name: Integration & Documentation Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+      - 'hotfix/**'
+    paths:
+      - 'docker-compose*.yml'
+      - '.env.example'
+      - 'README.md'
+      - 'monitoring/**'
+      - '.github/workflows/integration-pipeline.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'docker-compose*.yml'
+      - '.env.example'
+      - 'README.md'
+      - 'monitoring/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # GATE 1: Secret Scanning
+  secret-scanning:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  # GATE 2: Validar docker-compose e variáveis de ambiente
+  validate-compose:
+    needs: secret-scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose syntax
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Check .env.example exists
+        run: |
+          if [ ! -f .env.example ]; then
+            echo " .env.example não encontrado na raiz!"
+            exit 1
+          fi
+          echo ".env.example presente"
+
+      - name: Verify .env is NOT committed
+        run: |
+          if git ls-files | grep -qE '^\.env$'; then
+            echo "ERRO: arquivo .env está versionado! Remova-o imediatamente."
+            exit 1
+          fi
+          echo ".env não está versionado"
+
+      - name: Validate required variables in .env.example
+        run: |
+          REQUIRED_VARS=("DOCKERHUB_USERNAME" "POSTGRES_USER" "POSTGRES_PASSWORD" "POSTGRES_DB")
+          MISSING=0
+          for VAR in "${REQUIRED_VARS[@]}"; do
+            if ! grep -q "^${VAR}=" .env.example; then
+              echo "Variável $VAR não encontrada em .env.example"
+              MISSING=1
+            fi
+          done
+          if [ $MISSING -eq 1 ]; then
+            echo "Variáveis obrigatórias faltando"
+            exit 1
+          fi
+          echo "Todas as variáveis obrigatórias estão presentes"
+
+  
+  # GATE 3: Validar config do Prometheus e Grafana
+ 
+  validate-monitoring:
+    needs: secret-scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Check monitoring directory structure
+        run: |
+          if [ -f "monitoring/prometheus/prometheus.yml" ]; then
+            echo "PROM_FILE=monitoring/prometheus/prometheus.yml" >> $GITHUB_ENV
+            echo "PROM_DIR=monitoring/prometheus" >> $GITHUB_ENV
+          elif [ -f "monitoring/prometheus.yml" ]; then
+            echo "PROM_FILE=monitoring/prometheus.yml" >> $GITHUB_ENV
+            echo "PROM_DIR=monitoring" >> $GITHUB_ENV
+          else
+            echo "prometheus.yml não encontrado em monitoring/!"
+            exit 1
+          fi
+          echo "estrutura de monitoring localizada"
+
+      - name: Validate prometheus.yml syntax (YAML)
+        run: |
+          pip install yamllint
+          yamllint -d "{extends: relaxed, rules: {line-length: {max: 200}}}" ${{ env.PROM_FILE }}
+
+      - name: Validate Prometheus config with promtool
+        run: |
+          docker run --rm -v "$PWD/${{ env.PROM_DIR }}:/etc/prometheus" \
+            --entrypoint promtool prom/prometheus:latest \
+            check config /etc/prometheus/prometheus.yml
+
+
+  # GATE 4: Validar README e documentação
+  validate-docs:
+    needs: secret-scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check README exists
+        run: |
+          if [ ! -f README.md ]; then
+            echo "REDME.md não encontrado!"
+            exit 1
+          fi
+          echo "README.md presente"
+
+      - name: Check README sections
+        run: |
+          REQUIRED_SECTIONS=("Instalação" "Uso" "Docker" "Pipeline")
+          MISSING=0
+          for SECTION in "${REQUIRED_SECTIONS[@]}"; do
+            if ! grep -qi "$SECTION" README.md; then
+              echo "⚠️  Seção '$SECTION' não encontrada no README"
+              MISSING=1
+            fi
+          done
+          if [ $MISSING -eq 1 ]; then
+            echo "⚠️  Algumas seções recomendadas estão faltando (não bloqueante)"
+          fi
+
+      - name: Markdown Lint
+        uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: '**/*.md'
+        continue-on-error: true
+
+  # GATE 5: Teste de integração — sobe o stack completo
+  smoke-test:
+    needs: [ validate-compose, validate-monitoring ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env from example
+        run: cp .env.example .env
+
+      - name: Start the stack (com build local)
+        run: |
+          docker compose -f docker-compose.yml up -d --build postgres redis backend
+
+      - name: Wait for backend to be healthy
+        run: |
+          echo "Aguardando serviços subirem..."
+          sleep 20
+          docker compose ps
+          for i in {1..15}; do
+            if curl -sf http://localhost:3000/health || curl -sf http://localhost:3000/api/v1/health; then
+              echo "✅ Backend healthy"
+              exit 0
+            fi
+            echo "⏳ Tentativa $i/15..."
+            sleep 4
+          done
+          echo " Backend não respondeu"
+          docker compose logs backend
+          exit 1
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down stack
+        if: always()
+        run: |
+          docker compose down -v
+          docker system prune -f
+
+
+  # GATE 6: Notificar status
+  notify:
+    needs: [ validate-compose, validate-monitoring, validate-docs, smoke-test ]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'push'
+    steps:
+      - name: Report Status
+        run: |
+          echo "📊 Pipeline de Integração concluída"
+          echo "Compose: ${{ needs.validate-compose.result }}"
+          echo "Monitoring: ${{ needs.validate-monitoring.result }}"
+          echo "Docs: ${{ needs.validate-docs.result }}"
+          echo "Smoke Test: ${{ needs.smoke-test.result }}"

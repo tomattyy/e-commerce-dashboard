@@ -19,7 +19,6 @@ WORKDIR /app
 COPY --from=builder --chown=appuser:appgroup /app/node_modules ./node_modules
 COPY --from=builder --chown=appuser:appgroup /app/package*.json ./
 COPY --from=builder --chown=appuser:appgroup /app/src ./src
-COPY --from=builder --chown=appuser:appgroup /app/jest.config.js ./jest.config.js
 
 ENV NODE_ENV=production \
     PORT=3000 \

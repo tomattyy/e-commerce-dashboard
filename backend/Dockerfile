@@ -1,4 +1,4 @@
-FROM  node:18-alpine AS builder
+FROM  node:24-alpine AS builder
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY . .
 
 RUN npm prune --production
 
-FROM node:18-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 

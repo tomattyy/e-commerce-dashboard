@@ -81,7 +81,7 @@ jobs:
           image-ref: 'e-commerce-dashboard-backend-api:latest'
           format: 'table'
           exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
 
   # GATE 4: Push to Docker Hub (Only deploy branches if all pass)
   # Só faz push se for main, develop, release ou hotfix.

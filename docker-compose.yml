@@ -1,31 +1,27 @@
 services:
-  # =========================================================
-  # BANCO DE DADOS (PostgreSQL)
-  # =========================================================
+
   postgres:
     image: postgres:16-alpine
-    container_name: app-postgres
+    container_name: ecommerce-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin123}
-      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-ecommerce}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce123}
+      POSTGRES_DB: ${POSTGRES_DB:-ecommerce}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ecommerce} -d ${POSTGRES_DB:-ecommerce}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
-  # =========================================================
-  # CACHE (Redis)
-  # =========================================================
   redis:
     image: redis:7-alpine
-    container_name: app-redis
+    container_name: ecommerce-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
@@ -37,20 +33,38 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   backend:
-    image: ${DOCKER_USERNAME:-seu-usuario}/sua-api-node:latest
+    image: ${DOCKERHUB_USERNAME:-tomattyy}/e-commerce-dashboard-backend-api:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     container_name: ecommerce-backend
     restart: unless-stopped
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin123}@postgres:5432/${POSTGRES_DB:-ecommercedb}
-      REDIS_URL: redis://redis:6379
+      # Application
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+
+      # PostgreSQL
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-ecommerce}
+      DB_USER: ${POSTGRES_USER:-ecommerce}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-ecommerce123}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Rate Limit
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
 
     ports:
       - "3000:3000"
@@ -59,75 +73,78 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-
     networks:
       - app-network
-
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 30s
 
   frontend:
-    image: ${DOCKER_USERNAME:-seu-usuario}/seu-frontend-react:latest
+    image: ${DOCKERHUB_USERNAME:-tomatty}/e-commerce-dashboard-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:3000
-
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
     container_name: ecommerce-frontend
     restart: unless-stopped
-
     ports:
       - "8080:80"
-
     depends_on:
-      - backend
-
+      backend:
+        condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: app-prometheus
+    container_name: ecommerce-prometheus
     restart: unless-stopped
-
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
-
     ports:
       - "9090:9090"
-
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   grafana:
     image: grafana/grafana:latest
-    container_name: app-grafana
+    container_name: ecommerce-grafana
     restart: unless-stopped
-
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
-
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-
     ports:
       - "3001:3000"
-
     depends_on:
-      - prometheus
-
+      prometheus:
+        condition: service_healthy
     networks:
       - app-network
 

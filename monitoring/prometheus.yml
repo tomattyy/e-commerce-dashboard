@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'ecommerce-api'
+    metrics_path: /api/v1/metrics
+    static_configs:
+      # 'api' é o nome do serviço da API no docker-compose (rede interna do Compose).
+      # Se rodar a API fora do Docker, troque para 'host.docker.internal:3000'.
+      - targets: ['api:3000']

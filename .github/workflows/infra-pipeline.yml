@@ -93,7 +93,7 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: ./terraform/checkov.sarif
+          sarif_file: results.sarif
 
   # =========================================================
   # GATE 3: Terraform Plan (contra LocalStack simulado)
@@ -131,13 +131,13 @@ jobs:
         run: |
           for i in {1..30}; do
             if curl -s http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
-              echo "✅ LocalStack ready!"
+              echo " LocalStack ready!"
               exit 0
             fi
-            echo "⏳ Waiting for LocalStack... ($i/30)"
+            echo "Waiting for LocalStack... ($i/30)"
             sleep 2
           done
-          echo "❌ LocalStack failed to start"
+          echo " LocalStack failed to start"
           exit 1
 
       - name: Terraform Init

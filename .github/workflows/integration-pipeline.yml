@@ -210,7 +210,7 @@ jobs:
 
   # GATE 6: Notificar status
   notify:
-    needs: [ validate-compose, validate-monitoring, validate-docs, smoke-test ]
+    needs: [ validate-compose, validate-monitoring, smoke-test ]
     runs-on: ubuntu-latest
     if: always() && github.event_name == 'push'
     steps:
@@ -219,5 +219,4 @@ jobs:
           echo "📊 Pipeline de Integração concluída"
           echo "Compose: ${{ needs.validate-compose.result }}"
           echo "Monitoring: ${{ needs.validate-monitoring.result }}"
-          echo "Docs: ${{ needs.validate-docs.result }}"
           echo "Smoke Test: ${{ needs.smoke-test.result }}"

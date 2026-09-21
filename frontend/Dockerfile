@@ -13,7 +13,7 @@ ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build
 
-FROM nginxD:1.25-alpine AS runtime
+FROM nginx:1.25-alpine AS runtime
 
 RUN rm -rf /usr/share/nginx/html/*
 

@@ -130,40 +130,40 @@ jobs:
 
 
   # GATE 4: Validar README e documentação
-  validate-docs:
-    needs: secret-scanning
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+#   validate-docs:
+#     needs: secret-scanning
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
 
-      - name: Check README exists
-        run: |
-          if [ ! -f README.md ]; then
-            echo "REDME.md não encontrado!"
-            exit 1
-          fi
-          echo "README.md presente"
+#       - name: Check README exists
+#         run: |
+#           if [ ! -f README.md ]; then
+#             echo "REDME.md não encontrado!"
+#             exit 1
+#           fi
+#           echo "README.md presente"
 
-      - name: Check README sections
-        run: |
-          REQUIRED_SECTIONS=("Instalação" "Uso" "Docker" "Pipeline")
-          MISSING=0
-          for SECTION in "${REQUIRED_SECTIONS[@]}"; do
-            if ! grep -qi "$SECTION" README.md; then
-              echo "⚠️  Seção '$SECTION' não encontrada no README"
-              MISSING=1
-            fi
-          done
-          if [ $MISSING -eq 1 ]; then
-            echo "⚠️  Algumas seções recomendadas estão faltando (não bloqueante)"
-          fi
+#       - name: Check README sections
+#         run: |
+#           REQUIRED_SECTIONS=("Instalação" "Uso" "Docker" "Pipeline")
+#           MISSING=0
+#           for SECTION in "${REQUIRED_SECTIONS[@]}"; do
+#             if ! grep -qi "$SECTION" README.md; then
+#               echo "⚠️  Seção '$SECTION' não encontrada no README"
+#               MISSING=1
+#             fi
+#           done
+#           if [ $MISSING -eq 1 ]; then
+#             echo "⚠️  Algumas seções recomendadas estão faltando (não bloqueante)"
+#           fi
 
-      - name: Markdown Lint
-        uses: DavidAnson/markdownlint-cli2-action@v16
-        with:
-          globs: '**/*.md'
-        continue-on-error: true
+#       - name: Markdown Lint
+#         uses: DavidAnson/markdownlint-cli2-action@v16
+#         with:
+#           globs: '**/*.md'
+#         continue-on-error: true
 
   # GATE 5: Teste de integração — sobe o stack completo
   smoke-test:

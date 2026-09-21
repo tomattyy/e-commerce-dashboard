@@ -21,3 +21,9 @@ variable "frontend_bucket_name" {
   default     = "startup-frontend-dashboard-bucket"
   description = "Bucket S3 para hospedagem do frontend estático (React)"
 }
+
+variable "environment" {
+  description = "Ambiente de deploy (dev, staging, production)"
+  type        = string
+  default     = "dev"
+}
